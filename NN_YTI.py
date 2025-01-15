@@ -90,8 +90,8 @@ def MSE(y, Softmax):
     return(errorSum/len(oneHot))
 
 
-def backProp(X, Y, ReLU, Softmax, W2):
-    m = X.shape[0] # Tässä saamme batchin koon
+def backProp(X, Y, ReLU, Softmax, W2, batch_size):
+    m = batch_size # Tässä saamme batchin koon
     dZ2 = Softmax - Y # Tässä toteamme että del L / del W2 = A2 - Y_one-hot
     dZ2 /= m # Saamme batchin arvot normalisoitua 
     dW2 = np.dot(ReLU, dZ2.T) # Tässä laskemme arvon del L / del W2
@@ -130,41 +130,66 @@ def gradientDescent(W1, b1, W2, b2, learningRate, dW1, db1, dW2, db2):
     b2 -= db2 * learningRate
 
 
-def training_loop(X, Y, learningRate, epochs):
+def training_loop(X, Y, learningRate, epochs, batch_size, threshold):
     start_time = datetime.datetime.now()
     W1, b1, W2, b2 = annetaanArvot(784, 128, 10)
     losses = []
+    epoch_size = len(X)
+    classifiedAmount = batch_size
+    itseluokitellutX = []
+    itseluokitellutY = []
     #print(W1, b1, W2, b2)
     #with open("training_NN.csv", mode="w", newline="") as file:
         #writer = csv.writer(file)
         #writer.writerow(["Epoch", "Loss"])
     for epoch in range(epochs):
-        X = vectorify(x_train[epoch])
-        L1, ReLU, L2, Softmax = frontProp(X, W1, b1, W2, b2)
-        #print(Softmax)
-        #print(np.shape(Softmax))
-        #print("Muodot:")
-        #print(np.shape(L1), np.shape(ReLU), np.shape(L2), np.shape(Softmax))
+        for iter in range(batch_size):
+            X = vectorify(x_train[iter])
+            L1, ReLU, L2, Softmax = frontProp(X, W1, b1, W2, b2)
+                #print(Softmax)
+                #print(np.shape(Softmax))
+                #print("Muodot:")
+                #print(np.shape(L1), np.shape(ReLU), np.shape(L2), np.shape(Softmax))
 
-        #print(tulosta(x_train[epoch]))
+                #print(tulosta(x_train[iter]))
 
-        #print(np.shape(L1), np.shape(ReLU), np.shape(W2), np.shape(L2), np.shape(Softmax))
+                #print(np.shape(L1), np.shape(ReLU), np.shape(W2), np.shape(L2), np.shape(Softmax))
 
-        #print(f"layer 2:\n {L2}, \n activation:\n {Softmax}") 
+                #print(f"layer 2:\n {L2}, \n activation:\n {Softmax}") 
 
         
-        answer, confidence = output(Softmax)
-        #print(f"Arvaus {answer}, Varmuus{confidence}")
+                #answer, confidence = output(Softmax)
+                #print(f"Arvaus {answer}, Varmuus{confidence}")
 
-        loss, oneHot = crossError(y_train[epoch], Softmax)
-        #print(f"loss: {loss}")
-        #print(oneHot)
-        dW1, db1, dW2, db2 = backProp(X, oneHot, ReLU, Softmax, W2)
-        gradientDescent(W1, b1, W2, b2, learningRate, dW1, db1, dW2, db2)
-        if epoch % 100 == 0:
-            #losses.append((epoch, loss)) # Laittaa sen listaan
-            #writer.writerow([epoch, loss]) # Laittaa sen csv tiedostoon
-            print(f"Kierros: {epoch}, Loss: {loss}")
+            loss, oneHot = crossError(y_train[iter], Softmax)
+                #print(f"loss: {loss}")
+                #print(oneHot)
+            dW1, db1, dW2, db2 = backProp(X, oneHot, ReLU, Softmax, W2, batch_size)
+                    #losses.append((iter, loss)) # Laittaa sen listaan
+                    #writer.writerow([iter, loss]) # Laittaa sen csv tiedostoon
+            if iter % 5000 == 0:
+                print(f"Kierros: {iter}, Loss: {loss}")
+            gradientDescent(W1, b1, W2, b2, learningRate, dW1, db1, dW2, db2)
+        print(f"Epoch {epoch} finished")
+        tarkkuus = testing(x_test, y_test, W1, b1, W2, b2, 10000)
+        print(f"Tarkkuus: {tarkkuus}")
+        if tarkkuus >= threshold:
+            print(f"Tarpeeksi hyvät arvot löydetty!, tarkkuus: {tarkkuus}")
+            break
+        if classifiedAmount <= 59990:
+            iterY, iterX, iterClassified = itseluokittelu(X, W1, b1, W2, b2, tarkkuus, 10, classifiedAmount)
+            classifiedAmount += iterClassified
+            itseluokitellutX += iterX
+            itseluokitellutY += iterY
+        print("Itseluokitellut:")
+        for iter in range(len(itseluokitellutX)):
+            X = vectorify(x_train[itseluokitellutX[iter]])
+            L1, ReLU, L2, Softmax = frontProp(X, W1, b1, W2, b2)
+            loss, oneHot = crossError(y_train[iter], Softmax)
+            dW1, db1, dW2, db2 = backProp(X, oneHot, ReLU, Softmax, W2, batch_size)
+            if iter % 5000 == 0:
+                print(f"Kierros: {iter}, Loss: {loss}")
+            gradientDescent(W1, b1, W2, b2, learningRate, dW1, db1, dW2, db2)
     end_time = datetime.datetime.now()
     print("Valmis")
     print(f"Kesto {end_time - start_time}")
@@ -179,7 +204,19 @@ def testing(X, Y, W1, b1, W2, b2, amount):
             accuracy += 1
     return(accuracy/amount)
 
-W1, b1, W2, b2 = training_loop(x_train, y_train, 0.01, 60000)
+def itseluokittelu(X, W1, b1, W2, b2, tarkkuus, otos, rawData):
+    batchAmount = int(otos*tarkkuus)
+    selfClassified = np.zeros(batchAmount)
+    labels = []
+    for add in range(batchAmount):
+        selfClassified[add] = add + rawData+1
+        x, y, z, A2 = frontProp(X, W1, b1, W2, b2)
+        labels.append(output(A2)[0])
+    return labels, selfClassified, batchAmount
+
+W1, b1, W2, b2 = training_loop(x_train, y_train, 0.01, 10000, 15000, 0.9)
+
+
 
 x_test = np.reshape(x_test, (10000, 784))
 
