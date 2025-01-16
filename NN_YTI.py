@@ -32,10 +32,20 @@ def tulosta(arr):
 
 def annetaanArvot(input, piiloitettut, tulos):
     #8 saraketta ja 10 riviä kun input=10, piiloitettu=8
-    W1 = np.random.randn(input, piiloitettut) #muotoa rivit, sarakkeet
-    b1 = np.zeros((piiloitettut, 1))
-    W2 = np.random.randn(piiloitettut, tulos)
-    b2 = np.zeros((tulos, 1))
+    #W1 = np.random.randn(input, piiloitettut) #muotoa rivit, sarakkeet
+    #b1 = np.zeros((piiloitettut, 1))
+    #W2 = np.random.randn(piiloitettut, tulos)
+    #b2 = np.zeros((tulos, 1))
+
+    #np.savetxt("Weights_1.txt", W1)
+    #np.savetxt("biases_1.txt", b1)
+    #np.savetxt("Weights_2.txt", W2)
+    #np.savetxt("biases_2.txt", b2)
+
+    W1 = np.loadtxt("Weights_1.txt").reshape(784, 128)
+    b1 = np.loadtxt("biases_1.txt").reshape(128,1)
+    W2 = np.loadtxt("Weights_2.txt").reshape(128, 10)
+    b2 = np.loadtxt("biases_2.txt").reshape(10, 1)
     #print(np.shape(W1), np.shape(b1), np.shape(W2), np.shape(b2))
     return W1, b1, W2, b2
 
@@ -136,12 +146,12 @@ def training_loop(X, Y, learningRate, epochs, batch_size, threshold):
     losses = []
     epoch_size = len(X)
     classifiedAmount = batch_size
-    itseluokitellutX = []
+    itseluokitellutX = np.array([], dtype=int)
     itseluokitellutY = []
     #print(W1, b1, W2, b2)
-    #with open("training_NN.csv", mode="w", newline="") as file:
-        #writer = csv.writer(file)
-        #writer.writerow(["Epoch", "Loss"])
+    with open("ItseluokittelevaNN.csv", mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Epoch", "Tarkkuus"])
     for epoch in range(epochs):
         for iter in range(batch_size):
             X = vectorify(x_train[iter])
@@ -173,17 +183,21 @@ def training_loop(X, Y, learningRate, epochs, batch_size, threshold):
         print(f"Epoch {epoch} finished")
         tarkkuus = testing(x_test, y_test, W1, b1, W2, b2, 10000)
         print(f"Tarkkuus: {tarkkuus}")
+        with open("ItseluokittelevaNN.csv", mode="a", newline="") as file:
+            writer = csv.writer(file)
+            losses.append((epoch, tarkkuus)) # Laittaa sen listaan
+            writer.writerow([epoch, tarkkuus]) # Laittaa sen csv tiedostoon
         if tarkkuus >= threshold:
             print(f"Tarpeeksi hyvät arvot löydetty!, tarkkuus: {tarkkuus}")
             break
         if classifiedAmount <= 59990:
-            iterY, iterX, iterClassified = itseluokittelu(X, W1, b1, W2, b2, tarkkuus, 10, classifiedAmount)
+            iterY, iterX, iterClassified = itseluokittelu(X, W1, b1, W2, b2, tarkkuus, 100, classifiedAmount)
             classifiedAmount += iterClassified
-            itseluokitellutX += iterX
+            itseluokitellutX = np.concatenate((itseluokitellutX, iterX))
             itseluokitellutY += iterY
         print("Itseluokitellut:")
         for iter in range(len(itseluokitellutX)):
-            X = vectorify(x_train[itseluokitellutX[iter]])
+            X = vectorify(x_train[itseluokitellutX[iter].astype(int)])
             L1, ReLU, L2, Softmax = frontProp(X, W1, b1, W2, b2)
             loss, oneHot = crossError(y_train[iter], Softmax)
             dW1, db1, dW2, db2 = backProp(X, oneHot, ReLU, Softmax, W2, batch_size)
@@ -214,7 +228,7 @@ def itseluokittelu(X, W1, b1, W2, b2, tarkkuus, otos, rawData):
         labels.append(output(A2)[0])
     return labels, selfClassified, batchAmount
 
-W1, b1, W2, b2 = training_loop(x_train, y_train, 0.01, 10000, 15000, 0.9)
+W1, b1, W2, b2 = training_loop(x_train, y_train, 0.01, 100, 15000, 0.9)
 
 
 
