@@ -27,15 +27,25 @@ def tulosta(arr):
 
 
 #matriisi png:ksi:
-#grayscaleArr = x_train[0].astype(np.uint8)
-#cv2.imwrite('grayscale_image.png', grayscaleArr)
+    #grayscaleArr = x_train[0].astype(np.uint8)
+    #cv2.imwrite('grayscale_image.png', grayscaleArr)
 
-def annetaanArvot(input, piiloitettut, tulos):
+def annetaanArvot(input, piiloitetut, tulos):
     #8 saraketta ja 10 riviä kun input=10, piiloitettu=8
-    W1 = np.random.randn(input, piiloitettut) #muotoa rivit, sarakkeet
-    b1 = np.zeros((piiloitettut, 1))
-    W2 = np.random.randn(piiloitettut, tulos)
+    W1 = np.random.randn(input, piiloitetut) * np.sqrt(2/input) #muotoa rivit, sarakkeet, käytämme 'He initialization'
+    b1 = np.zeros((piiloitetut, 1))
+    W2 = np.random.randn(piiloitetut, tulos) * np.sqrt(2/piiloitetut)
     b2 = np.zeros((tulos, 1))
+
+    #np.savetxt("Weights_1.txt", W1)
+    #np.savetxt("biases_1.txt", b1)
+    #np.savetxt("Weights_2.txt", W2)
+    #np.savetxt("biases_2.txt", b2)
+
+    #W1 = np.loadtxt("Weights_1.txt").reshape(784, 128)
+    #b1 = np.loadtxt("biases_1.txt").reshape(128,1)
+    #W2 = np.loadtxt("Weights_2.txt").reshape(128, 10)
+    #b2 = np.loadtxt("biases_2.txt").reshape(10, 1)
     #print(np.shape(W1), np.shape(b1), np.shape(W2), np.shape(b2))
     return W1, b1, W2, b2
 
@@ -54,41 +64,19 @@ def vectorify(matrix):
     return(vector)
 
 def output(A2):
-    A2=A2.T # Teemme siitä pitkulan
-    suurin = [0,0] # Ekana luku, sitten arvo, esim. [4, 1.321415e-02]
-    for val in range(10):
-        if A2[0][val] > suurin[1]:
-            #print(f"tapahtu {val}")
-            #print(suurin[1])
-            #print(A2[0][val])
-            #print(suurin)
-            suurin = [[val],[A2[0][val]]]
-            #print(suurin)
-    return suurin
+    return np.argmax(A2, axis=0)
 
 
 def crossError(y, Softmax):
     #Ehkä käytämme categorical cross-entropy virhelaskentaa. Vaikka tuloksia on vain 1, käytämme One-hot encodingia muutoksia varten.
     m=len(Softmax)
+    epsilon = 1e-12
     Onehot = np.zeros((m, 1))
     Onehot[y] = 1
-    log_loss = -np.log(Softmax)
+    log_loss = -np.sum(Onehot * np.log(Softmax+epsilon), axis=0)
     #print(f"loss: {log_loss}")
-    loss = np.sum(log_loss)/m
+    loss = np.mean(log_loss)
     return loss, Onehot
-
-def MSE(y, Softmax):
-    #print(y)
-    #print(Softmax)
-    #print(np.shape(Softmax))
-    oneHot = np.zeros(10)
-    oneHot[y-1] = 1
-    errorSum = 0
-    for i in range(len(Softmax)):
-        #print((oneHot[i]-Softmax[i])**2)
-        errorSum += (oneHot[i]-i*Softmax[i])**2
-    return(errorSum/len(oneHot))
-
 
 def backProp(X, Y, ReLU, Softmax, W2, batch_size):
     m = batch_size # Tässä saamme batchin koon
@@ -132,16 +120,17 @@ def gradientDescent(W1, b1, W2, b2, learningRate, dW1, db1, dW2, db2):
 
 def training_loop(X, Y, learningRate, epochs, batch_size, threshold):
     start_time = datetime.datetime.now()
-    W1, b1, W2, b2 = annetaanArvot(784, 128, 10)
+    W1, b1, W2, b2 = annetaanArvot(784, 512, 10)
     losses = []
     epoch_size = len(X)
     classifiedAmount = batch_size
-    itseluokitellutX = []
+    itseluokitellutX = np.array([], dtype=int)
     itseluokitellutY = []
+    itseLearningRate = 0.001
     #print(W1, b1, W2, b2)
-    #with open("training_NN.csv", mode="w", newline="") as file:
-        #writer = csv.writer(file)
-        #writer.writerow(["Epoch", "Loss"])
+    #with open("FeedforwardNN.csv", mode="w", newline="") as file:
+    #    writer = csv.writer(file)
+    #    writer.writerow(["Epoch", "Tarkkuus"])
     for epoch in range(epochs):
         for iter in range(batch_size):
             X = vectorify(x_train[iter])
@@ -170,26 +159,32 @@ def training_loop(X, Y, learningRate, epochs, batch_size, threshold):
             if iter % 5000 == 0:
                 print(f"Kierros: {iter}, Loss: {loss}")
             gradientDescent(W1, b1, W2, b2, learningRate, dW1, db1, dW2, db2)
+
         print(f"Epoch {epoch} finished")
+        learningRate -= learningRate/epochs
         tarkkuus = testing(x_test, y_test, W1, b1, W2, b2, 10000)
         print(f"Tarkkuus: {tarkkuus}")
+        #with open("FeedforwardNN.csv", mode="a", newline="") as file:
+        #    writer = csv.writer(file)
+        #    losses.append((epoch, tarkkuus)) # Laittaa sen listaan
+        #    writer.writerow([epoch, tarkkuus]) # Laittaa sen csv tiedostoon
         if tarkkuus >= threshold:
             print(f"Tarpeeksi hyvät arvot löydetty!, tarkkuus: {tarkkuus}")
             break
-        if classifiedAmount <= 59990:
-            iterY, iterX, iterClassified = itseluokittelu(X, W1, b1, W2, b2, tarkkuus, 10, classifiedAmount)
+        if classifiedAmount <= 59990 and tarkkuus >= 0.4:
+            iterY, iterX, iterClassified = itseluokittelu(X, W1, b1, W2, b2, tarkkuus, 5900, classifiedAmount)
             classifiedAmount += iterClassified
-            itseluokitellutX += iterX
+            itseluokitellutX = np.concatenate((itseluokitellutX, iterX))
             itseluokitellutY += iterY
-        print("Itseluokitellut:")
-        for iter in range(len(itseluokitellutX)):
-            X = vectorify(x_train[itseluokitellutX[iter]])
-            L1, ReLU, L2, Softmax = frontProp(X, W1, b1, W2, b2)
-            loss, oneHot = crossError(y_train[iter], Softmax)
-            dW1, db1, dW2, db2 = backProp(X, oneHot, ReLU, Softmax, W2, batch_size)
-            if iter % 5000 == 0:
-                print(f"Kierros: {iter}, Loss: {loss}")
-            gradientDescent(W1, b1, W2, b2, learningRate, dW1, db1, dW2, db2)
+            print("Itseluokitellut:")
+            for iter in range(len(itseluokitellutX)):
+                X = vectorify(x_train[itseluokitellutX[iter].astype(int)])
+                L1, ReLU, L2, Softmax = frontProp(X, W1, b1, W2, b2)
+                loss, oneHot = crossError(y_train[iter], Softmax)
+                dW1, db1, dW2, db2 = backProp(X, oneHot, ReLU, Softmax, W2, batch_size)
+                if iter % 5000 == 0:
+                    print(f"Kierros: {iter}, Loss: {loss}")
+                gradientDescent(W1, b1, W2, b2, itselearningRate, dW1, db1, dW2, db2)
     end_time = datetime.datetime.now()
     print("Valmis")
     print(f"Kesto {end_time - start_time}")
@@ -214,7 +209,7 @@ def itseluokittelu(X, W1, b1, W2, b2, tarkkuus, otos, rawData):
         labels.append(output(A2)[0])
     return labels, selfClassified, batchAmount
 
-W1, b1, W2, b2 = training_loop(x_train, y_train, 0.01, 10000, 15000, 0.9)
+W1, b1, W2, b2 = training_loop(x_train, y_train, 0.013, 1000, 500, 0.9)
 
 
 
