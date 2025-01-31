@@ -13,7 +13,7 @@ x_test = x_test / 255.0
 x_train = x_train.reshape(x_train.shape[0], -1)  # Shape: (60000, 784)
 x_test = x_test.reshape(x_test.shape[0], -1)    # Shape: (10000, 784)
 
-otos = 10000 # Koko datasetti on 60 000
+otos = 5000 # Koko datasetti on 60 000
 
 def one_hot_encode(y, num_classes=10):
     return np.eye(num_classes)[y]
@@ -92,9 +92,9 @@ def train_neural_network(X, Y, otos, layer_sizes, learning_rate, epochs, batch_s
     luokiteltu = False # Ettei luokittele montaa kertaa, ottaa aikaa ja tekee mallista epätarkan
     accuracies = np.zeros(epochs)
     losses = []
-    with open("FeedforwardNN" + str(otos) + ".csv", mode="w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(["Epoch", "Tarkkuus"])
+    #with open("ItseluokittelevaNN" + str(otos) + ".csv", mode="w", newline="") as file:
+    #    writer = csv.writer(file)
+    #    writer.writerow(["Epoch", "Tarkkuus"])
 
     # Vain 15000 tiedossa
     X_initial = X[:otos]
@@ -107,27 +107,30 @@ def train_neural_network(X, Y, otos, layer_sizes, learning_rate, epochs, batch_s
         for i in range(0, X_initial.shape[0], batch_size):
             X_batch = X_initial[i:i + batch_size].T  # Transpose to shape (features, batch_size)
             Y_batch = Y_initial[i:i + batch_size].T  # Transpose to shape (classes, batch_size)
-            
             AL, caches = forward_propagation(X_batch, parameters)
             loss = compute_loss(AL, Y_batch)
             grads = backward_propagation(X_batch, Y_batch, parameters, caches)
             parameters = update_parameters(parameters, grads, learning_rate)
-        
         learning_rate *= 0.99
         accuracies[epoch] = test_neural_network(x_test.T, y_test.T, parameters) # Pidetään listaa kaikista tarkuuksista
-        
         print(f"Epoch {epoch + 1}/{epochs}, Loss: {loss:.4f}, Accuracy: {accuracies[epoch]:.4f}")
         
-        with open("FeedforwardNN" + str(otos) + ".csv", mode="a", newline="") as file:
-            writer = csv.writer(file)
-            losses.append((epoch, accuracies[epoch])) # Laittaa sen listaan
-            writer.writerow([epoch, accuracies[epoch]]) # Laittaa sen csv tiedostoon
+        #with open("ItseluokittelevaNN" + str(otos) + ".csv", mode="a", newline="") as file:
+        #    writer = csv.writer(file)
+        #    losses.append((epoch, accuracies[epoch])) # Laittaa sen listaan
+        #    writer.writerow([epoch, accuracies[epoch]]) # Laittaa sen csv tiedostoon
 
-        #if epoch >= 2 and (accuracies[epoch-1] + accuracies[epoch-2])/2 > accuracies[epoch] and luokiteltu == False:
-        #   luokiteltu = True
-        #    print(f"Threshold accuracy achieved! Accuracy: {accuracies[epoch]}")
-        X_initial, Y_initial = classify_remaining_data(X_unlabeled[:int(itseluokitteluBatch*accuracies[epoch])], parameters, X_initial, Y_initial)
+
+        # Itseloukittelu vaiheet:
+        
+        if epoch >= 2 and (accuracies[epoch-1] + accuracies[epoch-2])/2 > accuracies[epoch] and luokiteltu == False:
+            luokiteltu = True
+            print(f"Threshold accuracy achieved! Accuracy: {accuracies[epoch]}")
+            X_initial, Y_initial = itseluokittelu(X_unlabeled, parameters, X_initial, Y_initial)
+
+        X_initial, Y_initial = itseluokittelu(X_unlabeled[:int(itseluokitteluBatch*accuracies[epoch])], parameters, X_initial, Y_initial)
         X_unlabeled = X_unlabeled[int(itseluokitteluBatch*accuracies[epoch]):]
+
         print(np.shape(X_unlabeled))
     end_time = datetime.datetime.now()
     print("Training complete")
@@ -135,9 +138,9 @@ def train_neural_network(X, Y, otos, layer_sizes, learning_rate, epochs, batch_s
     return parameters
 
 
-def classify_remaining_data(X_unlabeled, parameters, X_initial, Y_initial):
-    AL, _ = forward_propagation(X_unlabeled.T, parameters)
-    predictions = np.argmax(AL, axis=0)
+def itseluokittelu(X_unlabeled, parameters, X_initial, Y_initial):
+    Y_arvot, _ = forward_propagation(X_unlabeled.T, parameters)
+    predictions = np.argmax(Y_arvot, axis=0)
     Y_unlabeled = one_hot_encode(predictions)
     X_initial = np.concatenate((X_initial, X_unlabeled), axis=0)
     Y_initial = np.concatenate((Y_initial, Y_unlabeled), axis=0)
